@@ -18,7 +18,10 @@ func main() {
 		out := image.NewRGBA(image.Rect(0, 0, b.Dx()/scale, b.Dy()/scale))
 		for y := 0; y < out.Rect.Max.Y; y++ {
 			for x := 0; x < out.Rect.Max.X; x++ {
-				out.Set(x, y, img.At(b.Min.X+x*scale, b.Min.Y+y*scale))
+				out.Set(x, y, img.At(
+					b.Min.X+x*scale+scale/2,
+					b.Min.Y+y*scale+scale/2,
+				))
 			}
 		}
 		save(out, path)

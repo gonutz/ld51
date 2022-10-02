@@ -8,7 +8,7 @@ import (
 	"github.com/gonutz/prototype/draw"
 )
 
-//go:embed "assets/*.png"
+//go:embed assets/*.png assets/*.tmx
 var assets embed.FS
 
 const (

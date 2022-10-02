@@ -1,8 +1,28 @@
 package main
 
+import (
+	"strconv"
+	"strings"
+
+	"github.com/gonutz/tiled"
+)
+
 func newLevel() *level {
+	f, err := assets.Open("assets/world.tmx")
+	check(err)
+	defer f.Close()
+
+	tileMap, err := tiled.Read(f)
+	check(err)
+
+	tileStrings := strings.Split(tileMap.Layers[0].Data.Text, ",")
+	tiles := make([]int, len(tileStrings))
+	for i, t := range tileStrings {
+		tiles[i], _ = strconv.Atoi(t)
+	}
+
 	lev := &level{
-		tiles:      worldTiles,
+		tiles:      tiles,
 		width:      worldWidth,
 		tileImage:  "assets/tiles.png",
 		tileSize:   16,

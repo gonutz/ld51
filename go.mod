@@ -2,7 +2,10 @@ module github.com/gonutz/ld51
 
 go 1.18
 
-require github.com/gonutz/prototype v1.1.1
+require (
+	github.com/gonutz/prototype v1.1.1
+	github.com/gonutz/tiled v1.0.0
+)
 
 require (
 	github.com/gonutz/d3d9 v1.2.1 // indirect

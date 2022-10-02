@@ -165,10 +165,16 @@ func main() {
 	cam.centerX = float64(guy.bounds.x + guy.bounds.width/2)
 	cam.centerY = float64(guy.bounds.y + guy.bounds.height/2)
 
+	updateMapOnSave := canUpdateLevel()
+
 	check(draw.RunWindow(title, 800, 600, func(window draw.Window) {
 		if window.WasKeyPressed(draw.KeyEscape) {
 			window.Close()
 			return
+		}
+
+		if updateMapOnSave {
+			updateLevel(world)
 		}
 
 		alt := window.IsKeyDown(draw.KeyLeftAlt) ||

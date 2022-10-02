@@ -1,17 +1,16 @@
 package main
 
 import (
+	"io/fs"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gonutz/tiled"
 )
 
-func newLevel() *level {
-	f, err := assets.Open("assets/world.tmx")
-	check(err)
-	defer f.Close()
-
+func loadLevel(f fs.File, lev *level) {
 	tileMap, err := tiled.Read(f)
 	check(err)
 
@@ -21,13 +20,11 @@ func newLevel() *level {
 		tiles[i], _ = strconv.Atoi(t)
 	}
 
-	lev := &level{
-		tiles:      tiles,
-		width:      worldWidth,
-		tileImage:  "assets/tiles.png",
-		tileSize:   16,
-		tileCountX: 128 / 16,
-	}
+	lev.tiles = tiles
+	lev.width = tileMap.Width
+	lev.tileImage = "assets/tiles.png"
+	lev.tileSize = tileMap.TileWidth
+	lev.tileCountX = 128 / tileMap.TileWidth
 
 	for i := range lev.tiles {
 		lev.tiles[i]--
@@ -50,6 +47,44 @@ out:
 			}
 		}
 	}
+}
+
+const worldFile = "assets/world.tmx"
+
+var lastWorldUpdate time.Time
+
+func canUpdateLevel() bool {
+	_, err := os.Stat(worldFile)
+	return err == nil
+}
+
+func updateLevel(lev *level) {
+	info, err := os.Stat(worldFile)
+	if err != nil {
+		return
+	}
+	if info.ModTime().After(lastWorldUpdate) {
+		lastWorldUpdate = info.ModTime()
+	} else {
+		return
+	}
+
+	f, err := os.Open(worldFile)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	loadLevel(f, lev)
+}
+
+func newLevel() *level {
+	f, err := assets.Open(worldFile)
+	check(err)
+	defer f.Close()
+
+	lev := &level{}
+	loadLevel(f, lev)
 
 	return lev
 }
@@ -144,8 +179,6 @@ func (l *level) collidesDownwards(x, y int) bool {
 func (l *level) walkableAt(x, y int) bool {
 	return l.tiles[l.xyToIndex(x, y)] != 0
 }
-
-const worldWidth = 100
 
 type walkability int
 

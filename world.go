@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"strconv"
@@ -10,66 +11,74 @@ import (
 	"github.com/gonutz/tiled"
 )
 
+func init() {
+	fmt.Print()
+}
+
+func layerByName(m *tiled.Map, name string) *tiled.Layer {
+	for i := range m.Layers {
+		if m.Layers[i].Name == name {
+			return &m.Layers[i]
+		}
+	}
+	panic("no layer in map named " + name)
+}
+
+func parseCsvTiles(s string) []int {
+	nums := strings.Split(s, ",")
+	tiles := make([]int, len(nums))
+	for i, n := range nums {
+		tiles[i], _ = strconv.Atoi(n)
+		tiles[i]--
+	}
+	return tiles
+}
+
 func loadLevel(f fs.File, lev *level) {
+	info, _ := f.Stat()
+	lev.modTime = info.ModTime()
+
 	tileMap, err := tiled.Read(f)
 	check(err)
 
-	tileStrings := strings.Split(tileMap.Layers[0].Data.Text, ",")
-	tiles := make([]int, len(tileStrings))
-	for i, t := range tileStrings {
-		tiles[i], _ = strconv.Atoi(t)
-	}
-
-	lev.tiles = tiles
+	lev.tiles = parseCsvTiles(layerByName(&tileMap, "base").Data.Text)
 	lev.width = tileMap.Width
-	lev.tileImage = "assets/tiles.png"
+	lev.tileImage = "assets/base.png"
 	lev.tileSize = tileMap.TileWidth
 	lev.tileCountX = 128 / tileMap.TileWidth
 
-	for i := range lev.tiles {
-		lev.tiles[i]--
-	}
-
+	objects := parseCsvTiles(layerByName(&tileMap, "objects").Data.Text)
 	w, h := lev.size()
 out:
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			if isStartTile(lev.tileAt(x, y)) {
+			tile := objects[lev.xyToIndex(x, y)]
+			if isStartTile(tile) {
 				lev.startTileX = x
 				lev.startTileY = y + 1
-				lev.startFacingLeft = tileFacesLeft(lev.tileAt(x, y))
-
-				lev.setTileAt(x, y, -1)
-				lev.setTileAt(x, y-1, -1)
-				lev.setTileAt(x, y-2, -1)
-
+				lev.startFacingLeft = tileFacesLeft(tile)
 				break out
 			}
 		}
 	}
 }
 
-const worldFile = "assets/world.tmx"
-
-var lastWorldUpdate time.Time
-
-func canUpdateLevel() bool {
-	_, err := os.Stat(worldFile)
+func canUpdateLevel(lev *level) bool {
+	_, err := os.Stat(lev.filePath)
 	return err == nil
 }
 
 func updateLevel(lev *level) {
-	info, err := os.Stat(worldFile)
+	info, err := os.Stat(lev.filePath)
 	if err != nil {
 		return
 	}
-	if info.ModTime().After(lastWorldUpdate) {
-		lastWorldUpdate = info.ModTime()
-	} else {
+
+	if !info.ModTime().After(lev.modTime) {
 		return
 	}
 
-	f, err := os.Open(worldFile)
+	f, err := os.Open(lev.filePath)
 	if err != nil {
 		return
 	}
@@ -78,26 +87,28 @@ func updateLevel(lev *level) {
 	loadLevel(f, lev)
 }
 
-func newLevel() *level {
-	f, err := assets.Open(worldFile)
+func newLevel(path string) *level {
+	f, err := assets.Open(path)
 	check(err)
 	defer f.Close()
 
-	lev := &level{}
+	lev := &level{filePath: path}
 	loadLevel(f, lev)
 
 	return lev
 }
 
 func isStartTile(tile int) bool {
-	return tile == 62 || tile == 63
+	return tile == 80 || tile == 81
 }
 
 func tileFacesLeft(tile int) bool {
-	return tile == 62
+	return tile == 81
 }
 
 type level struct {
+	filePath   string
+	modTime    time.Time
 	tiles      []int
 	width      int
 	tileImage  string
@@ -143,7 +154,7 @@ func (l *level) collidesDownwards(x, y int) bool {
 		return false
 	}
 	tile := l.tileAt(tileX, tileY)
-	if tile < 0 {
+	if 0 > tile || tile >= len(tileWalkability) {
 		return false
 	}
 
@@ -198,4 +209,8 @@ var tileWalkability = []walkability{
 	none, none, none, none, none, none, none, none,
 	none, none, none, none, topDown22_5, centerDown22_5, bottomUp22_5, centerUp22_5,
 	top, top, top, top, none, none, none, none,
+	none, none, none, top, none, none, none, none,
+	none, none, none, none, none, none, none, none,
+	top, top, top, none, none, none, none, none,
+	none, none, none, none, none, none, none, none,
 }

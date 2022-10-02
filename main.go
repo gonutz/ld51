@@ -115,7 +115,7 @@ func (c *character) update() {
 	}
 
 	c.nextRun++
-	if c.nextRun >= 4 {
+	if c.nextRun >= 5 {
 		c.nextRun = 0
 		c.runIndex = (c.runIndex + 1) % 8
 	}
@@ -149,7 +149,7 @@ func main() {
 
 	var (
 		fullscreen  = true
-		world       = newLevel()
+		world       = newLevel("assets/world.tmx")
 		guy         character
 		cam         = newCamera()
 		screenShake [][2]float64
@@ -165,7 +165,7 @@ func main() {
 	cam.centerX = float64(guy.bounds.x + guy.bounds.width/2)
 	cam.centerY = float64(guy.bounds.y + guy.bounds.height/2)
 
-	updateMapOnSave := canUpdateLevel()
+	updateMapOnSave := canUpdateLevel(world)
 
 	check(draw.RunWindow(title, 800, 600, func(window draw.Window) {
 		if window.WasKeyPressed(draw.KeyEscape) {
@@ -250,8 +250,8 @@ func main() {
 		}
 
 		guyX, guyY = guy.collider()
-		guy.onGround = world.collidesDownwards(guyX, guyY+1)
 		guy.speedY += 0.2
+		guy.onGround = world.collidesDownwards(guyX, guyY+1) && guy.speedY >= 0
 		if guy.onGround && up && guy.speedY >= 0 {
 			guy.speedY = -4
 		}

@@ -195,6 +195,73 @@ func (b *bat) image() string {
 	return fmt.Sprintf("assets/bat%d.png", b.frame)
 }
 
+type jumpkinState int
+
+const (
+	jumpkinJumping jumpkinState = iota
+	jumpkinBouncing
+)
+
+type jumpkin struct {
+	foot   worldPoint
+	speedY float64
+	dy     float64
+	bounce int
+	state  jumpkinState
+}
+
+func (j *jumpkin) update() {
+	switch j.state {
+	case jumpkinJumping:
+		j.dy += j.speedY
+		j.speedY += 0.13
+		if j.dy >= 0 {
+			j.state = jumpkinBouncing
+			j.bounce = 0
+		}
+	case jumpkinBouncing:
+		j.bounce++
+		if 6 <= j.bounce && j.bounce <= 10 {
+			j.dy = -1
+		}
+		if j.bounce >= 10 {
+			j.speedY = -4.7
+			j.dy = 0
+			j.state = jumpkinJumping
+		}
+	}
+}
+
+func (j *jumpkin) bounds() worldRect {
+	return worldRect{
+		x:      j.foot.x - 48/2,
+		y:      j.foot.y - 48 + round(j.dy),
+		width:  48,
+		height: 48,
+	}
+}
+
+func (j *jumpkin) sourceBounds() worldRect {
+	return worldRect{x: 0, y: 0, width: 48, height: 48}
+}
+
+func (j *jumpkin) image() string {
+	if j.state == jumpkinJumping {
+		if j.speedY < -1.5 {
+			return "assets/jumpkin4.png"
+		}
+		if j.speedY <= 1 {
+			return "assets/jumpkin0.png"
+		}
+		return "assets/jumpkin0.png"
+	} else {
+		if j.bounce > 6 {
+			return "assets/jumpkin2.png"
+		}
+		return "assets/jumpkin3.png"
+	}
+}
+
 func main() {
 	fmt.Print()
 
@@ -209,6 +276,7 @@ func main() {
 		cam         = newCamera()
 		screenShake [][2]float64
 		bats        []bat
+		jumpkins    []jumpkin
 		wasUp       bool
 	)
 
@@ -231,6 +299,16 @@ func main() {
 			frame:     i % 4,
 			nextFrame: 3 * i,
 		})
+	}
+
+	addJumpkin := func(x, y int) {
+		jumpkins = append(jumpkins, jumpkin{foot: worldPoint{x: x, y: y + 3}})
+	}
+	for _, startTile := range world.centeredJumpkinStarts {
+		addJumpkin(startTile.x*tileSize+tileSize/2, (startTile.y+1)*tileSize)
+	}
+	for _, startTile := range world.leftAlginedJumpkinStarts {
+		addJumpkin((1+startTile.x)*tileSize, (startTile.y+1)*tileSize)
 	}
 
 	shakeScreen := func(intensity float64) {
@@ -379,6 +457,9 @@ func main() {
 		for i := range bats {
 			bats[i].update()
 		}
+		for i := range jumpkins {
+			jumpkins[i].update()
+		}
 
 		worldWidth, worldHeight := world.size()
 		for y := 0; y < worldHeight; y++ {
@@ -418,6 +499,17 @@ func main() {
 			dest := cam.worldToCameraRect(b.bounds())
 			check(window.DrawImageFilePart(
 				b.image(),
+				source.x, source.y, source.width, source.height,
+				dest.x, dest.y, dest.width, dest.height,
+				0,
+			))
+		}
+
+		for _, j := range jumpkins {
+			source := j.sourceBounds()
+			dest := cam.worldToCameraRect(j.bounds())
+			check(window.DrawImageFilePart(
+				j.image(),
 				source.x, source.y, source.width, source.height,
 				dest.x, dest.y, dest.width, dest.height,
 				0,

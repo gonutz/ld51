@@ -45,7 +45,7 @@ func loadLevel(f fs.File, lev *level) {
 	lev.width = tileMap.Width
 	lev.tileImage = "assets/base.png"
 	lev.tileSize = tileMap.TileWidth
-	lev.tileCountX = 128 / tileMap.TileWidth
+	lev.tileCountX = 256 / tileMap.TileWidth
 
 	objects := parseCsvTiles(layerByName(&tileMap, "objects").Data.Text)
 	w, h := lev.size()
@@ -99,11 +99,11 @@ func newLevel(path string) *level {
 }
 
 func isStartTile(tile int) bool {
-	return tile == 80 || tile == 81
+	return tile == 272 || tile == 273
 }
 
 func tileFacesLeft(tile int) bool {
-	return tile == 81
+	return tile == 273
 }
 
 type level struct {
@@ -205,12 +205,12 @@ const (
 )
 
 var tileWalkability = []walkability{
-	top, top, top, top, none, none, down45, up45,
-	none, none, none, none, none, none, none, none,
-	none, none, none, none, topDown22_5, centerDown22_5, bottomUp22_5, centerUp22_5,
-	top, top, top, top, none, none, none, none,
-	none, none, none, top, none, none, none, none,
-	none, none, none, none, none, none, none, none,
-	top, top, top, none, none, none, none, none,
-	none, none, none, none, none, none, none, none,
+	top, top, top, top, none, none, down45, up45, none, none, none, none, none, none, none, none,
+	none, none, none, none, none, none, none, none, none, none, none, none, none, none, none, none,
+	none, none, none, none, topDown22_5, centerDown22_5, bottomUp22_5, centerUp22_5, none, none, none, none, none, none, none, none,
+	top, top, top, top, none, none, none, none, none, none, none, none, none, none, none, none,
+	none, none, none, top, none, none, none, none, none, none, none, none, none, none, none, none,
+	none, none, none, none, none, none, none, none, none, none, none, none, none, none, none, none,
+	top, top, top, none, none, none, none, none, none, none, none, none, none, none, none, none,
+	none, none, none, none, none, none, none, none, none, none, none, none, none, none, none, none,
 }

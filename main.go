@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/gonutz/prototype/draw"
 )
@@ -16,6 +17,13 @@ const (
 	tileSize        = 16
 	visibleTilesInX = 25
 	maxXSpeed       = 2
+	jumpSpeed       = -2.5
+	jumpHoldDelay   = 10
+	edgeJumpLeeway  = 50
+	gravity         = 0.18
+	batRadius       = 3 * tileSize
+	batSpeed        = 2
+	cameraDrag      = 0.15
 )
 
 /*
@@ -40,6 +48,10 @@ The camera has a center point, in world coordinates, and an integer scale
 factor.
 
 */
+
+type worldPoint struct {
+	x, y int
+}
 
 type worldRect struct {
 	x, y, width, height int
@@ -88,6 +100,7 @@ type character struct {
 	onGround   bool
 	runIndex   int
 	nextRun    int
+	jumpSince  int
 }
 
 func (c *character) sourceBounds() worldRect {
@@ -98,6 +111,7 @@ func (c *character) sourceBounds() worldRect {
 	}
 	return r
 }
+
 func (c *character) collider() (x, y int) {
 	return c.bounds.x + c.bounds.width/2, c.bounds.y + c.bounds.height - 3
 }
@@ -124,6 +138,8 @@ func (c *character) update() {
 		c.runIndex = 6
 		c.nextRun = 0
 	}
+
+	c.jumpSince++
 }
 
 func (c *character) image() string {
@@ -140,6 +156,45 @@ func (c *character) image() string {
 	return fmt.Sprintf("assets/run%d.png", c.runIndex)
 }
 
+type bat struct {
+	center    worldPoint
+	angle     int
+	frame     int
+	nextFrame int
+}
+
+func (b *bat) bounds() worldRect {
+	dy, dx := math.Sincos(degToRad(float64(b.angle)))
+	return worldRect{
+		x:      b.center.x + round(dx*batRadius) - 48/2,
+		y:      b.center.y + round(dy*batRadius) - 48/2,
+		width:  48,
+		height: 48,
+	}
+}
+
+func degToRad(deg float64) float64 {
+	return deg / 180 * math.Pi
+}
+
+func (b *bat) sourceBounds() worldRect {
+	return worldRect{x: 0, y: 0, width: 48, height: 48}
+}
+
+func (b *bat) update() {
+	b.angle = (b.angle + batSpeed) % 360
+
+	b.nextFrame++
+	if b.nextFrame >= 9 {
+		b.nextFrame = 0
+		b.frame = (b.frame + 1) % 4
+	}
+}
+
+func (b *bat) image() string {
+	return fmt.Sprintf("assets/bat%d.png", b.frame)
+}
+
 func main() {
 	fmt.Print()
 
@@ -153,6 +208,8 @@ func main() {
 		guy         character
 		cam         = newCamera()
 		screenShake [][2]float64
+		bats        []bat
+		wasUp       bool
 	)
 
 	guy.facingLeft = world.startFacingLeft
@@ -164,6 +221,33 @@ func main() {
 
 	cam.centerX = float64(guy.bounds.x + guy.bounds.width/2)
 	cam.centerY = float64(guy.bounds.y + guy.bounds.height/2)
+
+	for i, startTile := range world.batStarts {
+		bats = append(bats, bat{
+			center: worldPoint{
+				x: startTile.x * tileSize,
+				y: startTile.y*tileSize + tileSize - batRadius - 24,
+			},
+			frame:     i % 4,
+			nextFrame: 3 * i,
+		})
+	}
+
+	shakeScreen := func(intensity float64) {
+		if len(screenShake) == 0 {
+			x := intensity
+			screenShake = [][2]float64{
+				{-3 * x, 0},
+				{0, -2 * x},
+				{1 * x, 0},
+				{0, 4 * x},
+				{2 * x, 0},
+				{0, -2 * x},
+				{2 * x, -3 * x},
+				{-2 * x, 3 * x},
+			}
+		}
+	}
 
 	updateMapOnSave := canUpdateLevel(world)
 
@@ -199,6 +283,7 @@ func main() {
 		left := window.IsKeyDown(draw.KeyLeft)
 		right := window.IsKeyDown(draw.KeyRight)
 		up := window.IsKeyDown(draw.KeyUp)
+		upPressed := up && !wasUp
 
 		xAcceleration := 0
 		if left {
@@ -249,17 +334,27 @@ func main() {
 			}
 		}
 
+		if !(up && guy.jumpSince <= jumpHoldDelay) {
+			guy.speedY += gravity
+		}
+		if !up {
+			guy.jumpSince = jumpHoldDelay
+		}
+
 		guyX, guyY = guy.collider()
-		guy.speedY += 0.2
 		guy.onGround = world.collidesDownwards(guyX, guyY+1) && guy.speedY >= 0
-		if guy.onGround && up && guy.speedY >= 0 {
-			guy.speedY = -4
+		if upPressed && guy.speedY != 0 && guy.onGround {
+			guy.speedY = jumpSpeed
+			guy.jumpSince = 0
 		}
 		dy := round(guy.speedY)
 		for dy > 0 {
 			guy.move(0, 1)
 			if world.collidesDownwards(guy.collider()) {
 				guy.move(0, -1)
+				if guy.speedY >= 5 {
+					shakeScreen((guy.speedY - 5) / 10)
+				}
 				guy.speedY = 0
 				dy = 0
 			} else {
@@ -270,30 +365,20 @@ func main() {
 
 		guyCenterX := float64(guy.bounds.x + guy.bounds.width/2)
 		guyCenterY := float64(guy.bounds.y + guy.bounds.height/2)
-		const camDrag = 0.15
-		cam.centerX = camDrag*guyCenterX + (1.0-camDrag)*cam.centerX
-		cam.centerY = camDrag*guyCenterY + (1.0-camDrag)*cam.centerY
+		cam.centerX = cameraDrag*guyCenterX + (1.0-cameraDrag)*cam.centerX
+		cam.centerY = cameraDrag*guyCenterY + (1.0-cameraDrag)*cam.centerY
 
 		if len(screenShake) > 0 {
 			s := screenShake[0]
 			cam.centerX += s[0]
 			cam.centerY += s[1]
 			screenShake = screenShake[1:]
-		} else if window.WasKeyPressed(draw.KeySpace) {
-			// TODO For debugging we shake the screen on SPACE.
-			screenShake = [][2]float64{
-				{-3, 0},
-				{0, -2},
-				{1, 0},
-				{0, 4},
-				{2, 0},
-				{0, -2},
-				{2, -3},
-				{-2, 3},
-			}
 		}
 
 		guy.update()
+		for i := range bats {
+			bats[i].update()
+		}
 
 		worldWidth, worldHeight := world.size()
 		for y := 0; y < worldHeight; y++ {
@@ -318,6 +403,7 @@ func main() {
 				)
 			}
 		}
+
 		guySource := guy.sourceBounds()
 		guyDest := cam.worldToCameraRect(guy.bounds)
 		check(window.DrawImageFilePart(
@@ -326,6 +412,19 @@ func main() {
 			guyDest.x, guyDest.y, guyDest.width, guyDest.height,
 			0,
 		))
+
+		for _, b := range bats {
+			source := b.sourceBounds()
+			dest := cam.worldToCameraRect(b.bounds())
+			check(window.DrawImageFilePart(
+				b.image(),
+				source.x, source.y, source.width, source.height,
+				dest.x, dest.y, dest.width, dest.height,
+				0,
+			))
+		}
+
+		wasUp = up
 	}))
 }
 

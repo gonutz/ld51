@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"strconv"
@@ -11,28 +10,15 @@ import (
 	"github.com/gonutz/tiled"
 )
 
-func init() {
-	fmt.Print()
-}
-
-func layerByName(m *tiled.Map, name string) *tiled.Layer {
-	for i := range m.Layers {
-		if m.Layers[i].Name == name {
-			return &m.Layers[i]
-		}
-	}
-	panic("no layer in map named " + name)
-}
-
-func parseCsvTiles(s string) []int {
-	nums := strings.Split(s, ",")
-	tiles := make([]int, len(nums))
-	for i, n := range nums {
-		tiles[i], _ = strconv.Atoi(n)
-		tiles[i]--
-	}
-	return tiles
-}
+const (
+	tileGuyFacingRight     = 288
+	tileGuyFacingLeft      = 289
+	tileJumpkinCentered    = 275
+	tileJumpkinLeftAligned = 277
+	tileBat                = 337
+	tileCrawlerFacingLeft  = 369
+	tileCrawlerFacingRight = 401
+)
 
 func loadLevel(f fs.File, lev *level) {
 	info, _ := f.Stat()
@@ -47,17 +33,33 @@ func loadLevel(f fs.File, lev *level) {
 	lev.tileSize = tileMap.TileWidth
 	lev.tileCountX = 256 / tileMap.TileWidth
 
+	lev.batStarts = lev.batStarts[:0]
+	lev.leftFacingCrawlerStarts = lev.leftFacingCrawlerStarts[:0]
+	lev.rightFacingCrawlerStarts = lev.rightFacingCrawlerStarts[:0]
+	lev.centeredJumpkinStarts = lev.centeredJumpkinStarts[:0]
+	lev.leftAlginedJumpkinStarts = lev.leftAlginedJumpkinStarts[:0]
+
 	objects := parseCsvTiles(layerByName(&tileMap, "objects").Data.Text)
 	w, h := lev.size()
-out:
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			tile := objects[lev.xyToIndex(x, y)]
-			if isStartTile(tile) {
+			pos := tilePos{x: x, y: y}
+			switch tile {
+			case tileGuyFacingRight, tileGuyFacingLeft:
 				lev.startTileX = x
 				lev.startTileY = y + 1
-				lev.startFacingLeft = tileFacesLeft(tile)
-				break out
+				lev.startFacingLeft = tile == tileGuyFacingLeft
+			case tileJumpkinCentered:
+				lev.centeredJumpkinStarts = append(lev.centeredJumpkinStarts, pos)
+			case tileJumpkinLeftAligned:
+				lev.leftAlginedJumpkinStarts = append(lev.leftAlginedJumpkinStarts, pos)
+			case tileBat:
+				lev.batStarts = append(lev.batStarts, pos)
+			case tileCrawlerFacingLeft:
+				lev.leftFacingCrawlerStarts = append(lev.leftFacingCrawlerStarts, pos)
+			case tileCrawlerFacingRight:
+				lev.rightFacingCrawlerStarts = append(lev.rightFacingCrawlerStarts, pos)
 			}
 		}
 	}
@@ -87,6 +89,25 @@ func updateLevel(lev *level) {
 	loadLevel(f, lev)
 }
 
+func layerByName(m *tiled.Map, name string) *tiled.Layer {
+	for i := range m.Layers {
+		if m.Layers[i].Name == name {
+			return &m.Layers[i]
+		}
+	}
+	panic("no layer in map named " + name)
+}
+
+func parseCsvTiles(s string) []int {
+	nums := strings.Split(s, ",")
+	tiles := make([]int, len(nums))
+	for i, n := range nums {
+		tiles[i], _ = strconv.Atoi(n)
+		tiles[i]--
+	}
+	return tiles
+}
+
 func newLevel(path string) *level {
 	f, err := assets.Open(path)
 	check(err)
@@ -96,14 +117,6 @@ func newLevel(path string) *level {
 	loadLevel(f, lev)
 
 	return lev
-}
-
-func isStartTile(tile int) bool {
-	return tile == 272 || tile == 273
-}
-
-func tileFacesLeft(tile int) bool {
-	return tile == 273
 }
 
 type level struct {
@@ -116,9 +129,18 @@ type level struct {
 	tileCountX int
 	// startTileX, startTileY is the tile that our character is standing on at
 	// the beginning of the level.
-	startTileX      int
-	startTileY      int
-	startFacingLeft bool
+	startTileX               int
+	startTileY               int
+	startFacingLeft          bool
+	batStarts                []tilePos
+	leftFacingCrawlerStarts  []tilePos
+	rightFacingCrawlerStarts []tilePos
+	centeredJumpkinStarts    []tilePos
+	leftAlginedJumpkinStarts []tilePos
+}
+
+type tilePos struct {
+	x, y int
 }
 
 func (l *level) size() (width, height int) {
